@@ -147,27 +147,31 @@ enum KeychainHelper {
     }
 
     private static func extractCredentials(from json: [String: Any]) -> OAuthCredentials? {
-        // The keychain entry has a claudeAiOauth object
-        guard let oauth = json["claudeAiOauth"] as? [String: Any],
-              let accessToken = oauth["accessToken"] as? String else {
-            print("Missing claudeAiOauth.accessToken in keychain data")
-            return nil
+        // Try nested format first (legacy): {"claudeAiOauth": {"accessToken": ...}}
+        if let oauth = json["claudeAiOauth"] as? [String: Any],
+           let accessToken = oauth["accessToken"] as? String {
+            return parseOAuthFields(from: oauth, accessToken: accessToken)
         }
 
-        let refreshToken = oauth["refreshToken"] as? String ?? ""
+        // Flat format (current): {"accessToken": "sk-ant-..."}
+        if let accessToken = json["accessToken"] as? String {
+            return parseOAuthFields(from: json, accessToken: accessToken)
+        }
+
+        print("Missing accessToken in keychain data")
+        return nil
+    }
+
+    private static func parseOAuthFields(from dict: [String: Any], accessToken: String) -> OAuthCredentials {
+        let refreshToken = dict["refreshToken"] as? String ?? ""
         var expiresAt: Date? = nil
-        if let expiresAtStr = oauth["expiresAt"] as? String {
+        if let expiresAtStr = dict["expiresAt"] as? String {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             expiresAt = formatter.date(from: expiresAtStr)
-        } else if let expiresAtNum = oauth["expiresAt"] as? TimeInterval {
+        } else if let expiresAtNum = dict["expiresAt"] as? TimeInterval {
             expiresAt = Date(timeIntervalSince1970: expiresAtNum / 1000)
         }
-
-        return OAuthCredentials(
-            accessToken: accessToken,
-            refreshToken: refreshToken,
-            expiresAt: expiresAt
-        )
+        return OAuthCredentials(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt)
     }
 }

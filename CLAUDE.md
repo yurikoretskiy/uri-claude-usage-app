@@ -22,6 +22,7 @@ ClaudeUsage/
 
 ## Data Flow
 1. `KeychainHelper` reads OAuth token from `Claude Code-credentials` keychain entry
+   - Supports two JSON formats: nested `{"claudeAiOauth": {"accessToken": ...}}` (legacy) and flat `{"accessToken": ...}` (current)
 2. `UsageService` calls `GET https://api.anthropic.com/api/oauth/usage` with Bearer token and `User-Agent: claude-code/X.X.X` header (required by Cloudflare)
 3. API returns `{ five_hour: { utilization: 55.0, resets_at: "..." }, seven_day: { ... } }`
 4. `MenuBarRenderer` generates an NSImage from the session percentage
