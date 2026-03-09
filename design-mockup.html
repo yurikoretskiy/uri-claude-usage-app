@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Usage — Popover Design Reference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'DM Sans', system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 60px 40px;
+    gap: 80px;
+    background: #2a2a2e;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .mode-label {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #888;
+  }
+
+  /* ── Popover shell ── */
+  .popover {
+    width: 300px;
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Frosted glass / vibrancy simulation */
+  .popover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    pointer-events: none;
+  }
+
+  /* ── LIGHT ── */
+  .popover.light {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(40px) saturate(1.4);
+    -webkit-backdrop-filter: blur(40px) saturate(1.4);
+    box-shadow:
+      0 0 0 0.5px rgba(0,0,0,0.12),
+      0 8px 32px rgba(0,0,0,0.14),
+      0 2px 8px rgba(0,0,0,0.06);
+  }
+  .popover.light::before {
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%);
+  }
+
+  .light .title        { color: #1d1d1f; font-size: 16px; font-weight: 700; }
+  .light .section-head { color: #1d1d1f; font-size: 14px; font-weight: 600; }
+  .light .sub          { color: #86868b; font-size: 13px; font-weight: 400; }
+  .light .pct          { color: #86868b; font-size: 13px; font-weight: 500; }
+  .light .bar-track    { background: #e8e8ed; }
+  .light .divider      { background: #d2d2d7; opacity: 0.6; }
+  .light .footer-text  { color: #86868b; }
+  .light .refresh-btn  { color: #86868b; }
+  .light .refresh-btn:hover { color: #1d1d1f; }
+  .light .quit         { color: #86868b; }
+  .light .quit:hover   { color: #1d1d1f; }
+  .light .error-bg     { background: #fff3cd; }
+  .light .error-text   { color: #856404; }
+
+  /* ── DARK ── */
+  .popover.dark {
+    background: rgba(30, 30, 30, 0.88);
+    backdrop-filter: blur(40px) saturate(1.6);
+    -webkit-backdrop-filter: blur(40px) saturate(1.6);
+    box-shadow:
+      0 0 0 0.5px rgba(255,255,255,0.08),
+      0 8px 32px rgba(0,0,0,0.5),
+      0 2px 8px rgba(0,0,0,0.3);
+  }
+  .popover.dark::before {
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+  }
+
+  .dark .title        { color: #f5f5f7; font-size: 16px; font-weight: 700; }
+  .dark .section-head { color: #f5f5f7; font-size: 14px; font-weight: 600; }
+  .dark .sub          { color: #98989d; font-size: 13px; font-weight: 400; }
+  .dark .pct          { color: #98989d; font-size: 13px; font-weight: 500; }
+  .dark .bar-track    { background: rgba(255,255,255,0.08); }
+  .dark .divider      { background: rgba(255,255,255,0.1); }
+  .dark .footer-text  { color: #98989d; }
+  .dark .refresh-btn  { color: #98989d; }
+  .dark .refresh-btn:hover { color: #f5f5f7; }
+  .dark .quit         { color: #98989d; }
+  .dark .quit:hover   { color: #f5f5f7; }
+  .dark .error-bg     { background: rgba(255, 153, 0, 0.1); }
+  .dark .error-text   { color: #ff9900; }
+
+  /* ── Shared elements ── */
+  .section { margin-bottom: 0; }
+
+  .section-head { margin-bottom: 2px; }
+
+  .sub { margin-bottom: 8px; }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: #ff9900;
+    position: relative;
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Subtle shine on the bar */
+  .bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 100%);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .pct {
+    flex-shrink: 0;
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .divider {
+    height: 0.5px;
+    margin: 14px 0;
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-text {
+    font-size: 12px;
+  }
+
+  .refresh-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .quit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 0;
+    font-family: inherit;
+    transition: color 0.15s ease;
+  }
+
+  /* ── Arrow nub at top ── */
+  .popover-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .arrow {
+    width: 18px;
+    height: 9px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .arrow.light-arrow svg { fill: rgba(255,255,255,0.92); }
+  .arrow.dark-arrow svg  { fill: rgba(30,30,30,0.88); }
+
+  /* Color annotations */
+  .annotation-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    max-width: 300px;
+    justify-content: center;
+  }
+
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #888;
+    letter-spacing: 0.02em;
+  }
+
+  .swatch-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════ LIGHT MODE ════════════ -->
+<div class="column">
+  <span class="mode-label">Light Mode</span>
+  <div class="popover-wrapper">
+    <div class="arrow light-arrow">
+      <svg viewBox="0 0 18 9" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 9 L9 0 L18 9 Z"/>
+      </svg>
+    </div>
+    <div class="popover light">
+      <div class="title" style="margin-bottom: 16px;">Plan usage limits</div>
+
+      <div class="section">
+        <div class="section-head">Current session</div>
+        <div class="sub">Resets in 4 hr 26 min</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width: 19%;"></div></div>
+          <div class="pct">19% used</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="title" style="margin-bottom: 4px;">Weekly limits</div>
+      <div class="section">
+        <div class="section-head" style="margin-top: 4px;">All models</div>
+        <div class="sub">Resets Sun 7:59 PM</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width: 30%;"></div></div>
+          <div class="pct">30% used</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="footer">
+        <span class="footer-text">Last updated: 11 secs ago</span>
+        <button class="refresh-btn" title="Refresh">↻</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <button class="quit">Quit</button>
+    </div>
+  </div>
+
+  <div class="annotation-strip">
+    <div class="swatch"><span class="swatch-dot" style="background:#fff;border-color:rgba(0,0,0,0.15);"></span> bg</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#1d1d1f;"></span> text</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#86868b;"></span> secondary</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#ff9900;"></span> accent</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#e8e8ed;"></span> track</div>
+  </div>
+</div>
+
+<!-- ════════════ DARK MODE ════════════ -->
+<div class="column">
+  <span class="mode-label">Dark Mode</span>
+  <div class="popover-wrapper">
+    <div class="arrow dark-arrow">
+      <svg viewBox="0 0 18 9" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 9 L9 0 L18 9 Z"/>
+      </svg>
+    </div>
+    <div class="popover dark">
+      <div class="title" style="margin-bottom: 16px;">Plan usage limits</div>
+
+      <div class="section">
+        <div class="section-head">Current session</div>
+        <div class="sub">Resets in 4 hr 26 min</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width: 19%;"></div></div>
+          <div class="pct">19% used</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="title" style="margin-bottom: 4px;">Weekly limits</div>
+      <div class="section">
+        <div class="section-head" style="margin-top: 4px;">All models</div>
+        <div class="sub">Resets Sun 7:59 PM</div>
+        <div class="bar-row">
+          <div class="bar-track"><div class="bar-fill" style="width: 30%;"></div></div>
+          <div class="pct">30% used</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="footer">
+        <span class="footer-text">Last updated: 11 secs ago</span>
+        <button class="refresh-btn" title="Refresh">↻</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <button class="quit">Quit</button>
+    </div>
+  </div>
+
+  <div class="annotation-strip">
+    <div class="swatch"><span class="swatch-dot" style="background:#1e1e1e;"></span> bg</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#f5f5f7;"></span> text</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#98989d;"></span> secondary</div>
+    <div class="swatch"><span class="swatch-dot" style="background:#ff9900;"></span> accent</div>
+    <div class="swatch"><span class="swatch-dot" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);"></span> track</div>
+  </div>
+</div>
+
+</body>
+</html>
