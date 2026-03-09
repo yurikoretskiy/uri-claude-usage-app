@@ -93,6 +93,39 @@ struct DetailPopover: View {
                         .fixedSize()
                 }
                 .padding(.top, 4)
+
+                // Model-specific limits (e.g. Sonnet, Opus)
+                ForEach(Array(usageService.usage.modelLimits.enumerated()), id: \.offset) { _, model in
+                    Text(model.label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .padding(.top, 10)
+
+                    if let resetTime = model.resetTime {
+                        Text("Resets \(resetLabel(for: resetTime))")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack(spacing: 12) {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.secondary.opacity(0.2))
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(accentOrange)
+                                    .frame(width: max(0, geo.size.width * min(model.percent, 100) / 100))
+                            }
+                        }
+                        .frame(height: 8)
+
+                        Text("\(Int(round(model.percent)))% used")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .fixedSize()
+                    }
+                    .padding(.top, 4)
+                }
             }
 
             Divider()
@@ -150,8 +183,12 @@ struct DetailPopover: View {
         guard let resetTime = usageService.usage.weeklyResetTime else {
             return ""
         }
+        return resetLabel(for: resetTime)
+    }
+
+    private func resetLabel(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE h:mm a"
-        return "Resets \(formatter.string(from: resetTime))"
+        return formatter.string(from: date)
     }
 }

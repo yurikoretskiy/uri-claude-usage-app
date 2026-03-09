@@ -27,6 +27,9 @@ enum KeychainHelper {
     private static var cachedCredentials: OAuthCredentials?
     private static var cacheTime: Date?
 
+    /// Path to Claude Code's credentials file — the canonical token source.
+    private static let credentialsFilePath = NSString("~/.claude/.credentials.json").expandingTildeInPath
+
     static func readClaudeOAuthToken() -> OAuthCredentials? {
         // Return cached token if less than 5 minutes old
         if let cached = cachedCredentials, let cacheTime = cacheTime,
@@ -34,9 +37,34 @@ enum KeychainHelper {
             return cached
         }
 
-        // Use `security -g` which outputs the full hex password on stderr.
-        // The `-w` flag truncates large passwords (~2010 bytes), breaking
-        // JSON parsing when credentials are hex-encoded.
+        // PRIMARY: read from ~/.claude/.credentials.json (same source Claude Code uses)
+        if let creds = readFromCredentialsFile() {
+            cachedCredentials = creds
+            cacheTime = Date()
+            return creds
+        }
+
+        // FALLBACK: read from macOS Keychain
+        if let creds = readFromKeychain() {
+            cachedCredentials = creds
+            cacheTime = Date()
+            return creds
+        }
+
+        return nil
+    }
+
+    /// Read credentials from ~/.claude/.credentials.json
+    private static func readFromCredentialsFile() -> OAuthCredentials? {
+        guard let data = FileManager.default.contents(atPath: credentialsFilePath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return extractCredentials(from: json)
+    }
+
+    /// Read credentials from macOS Keychain (legacy fallback)
+    private static func readFromKeychain() -> OAuthCredentials? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-g"]
@@ -59,7 +87,6 @@ enum KeychainHelper {
             return nil
         }
 
-        // `-g` outputs the password on stderr
         let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: errData, encoding: .utf8), !output.isEmpty else {
             print("Empty keychain data")
@@ -72,20 +99,12 @@ enum KeychainHelper {
             return nil
         }
 
-        // Try full JSON parse first (works if data isn't truncated)
         if let jsonData = decoded.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-            let credentials = extractCredentials(from: json)
-            cachedCredentials = credentials
-            cacheTime = Date()
-            return credentials
+            return extractCredentials(from: json)
         }
 
-        // Fallback: extract token via regex (handles truncated JSON)
-        let credentials = extractCredentialsViaRegex(from: decoded)
-        cachedCredentials = credentials
-        cacheTime = Date()
-        return credentials
+        return extractCredentialsViaRegex(from: decoded)
     }
 
     /// Decode the password line from `security -g` output.

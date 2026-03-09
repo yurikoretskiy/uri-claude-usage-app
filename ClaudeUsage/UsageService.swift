@@ -1,11 +1,18 @@
 import Foundation
 import Combine
 
+struct ModelLimit {
+    let label: String
+    let percent: Double
+    let resetTime: Date?
+}
+
 struct UsageData {
     var sessionPercent: Double = 0
     var sessionResetTime: Date? = nil
     var weeklyPercent: Double = 0
     var weeklyResetTime: Date? = nil
+    var modelLimits: [ModelLimit] = []
     var lastFetched: Date? = nil
     var error: String? = nil
 }
@@ -18,7 +25,7 @@ class UsageService: ObservableObject {
     private var timer: Timer?
     private var refreshInterval: TimeInterval = 60
     private let defaultInterval: TimeInterval = 60
-    private let maxInterval: TimeInterval = 300
+    private let maxInterval: TimeInterval = 120
 
     init() {
         startPolling()
@@ -68,11 +75,6 @@ class UsageService: ObservableObject {
                 return
             }
 
-            // Log raw response for debugging
-            if let rawStr = String(data: data, encoding: .utf8) {
-                print("[ClaudeUsage] API response (\(httpResponse.statusCode)): \(rawStr)")
-            }
-
             if httpResponse.statusCode == 401 {
                 KeychainHelper.clearCache()
                 usage.error = "Token expired. Run 'claude' to refresh your session."
@@ -80,11 +82,32 @@ class UsageService: ObservableObject {
             }
 
             if httpResponse.statusCode == 429 {
-                // Back off on rate limit, keep showing cached data
+                // Retry once after delay (min 10s + jitter to avoid sync issues)
+                let retryAfterHeader = Int(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 10
+                let retryDelay = max(retryAfterHeader, 10) + Int.random(in: 0...15)
+                try? await Task.sleep(nanoseconds: UInt64(retryDelay) * 1_000_000_000)
+                do {
+                    let (data2, response2) = try await URLSession.shared.data(for: request)
+                    if let http2 = response2 as? HTTPURLResponse, http2.statusCode == 200,
+                       let json2 = try JSONSerialization.jsonObject(with: data2) as? [String: Any] {
+                        parseUsageResponse(json2)
+                        usage.lastFetched = Date()
+                        usage.error = nil
+                        if refreshInterval != defaultInterval {
+                            refreshInterval = defaultInterval
+                            startPolling()
+                        }
+                        return
+                    }
+                } catch { }
+
+                // Retry also failed — back off silently if we have cached data
                 refreshInterval = min(refreshInterval * 2, maxInterval)
                 startPolling()
-                let cachedNote = usage.lastFetched != nil ? " (showing cached data)" : ""
-                usage.error = "Rate limited — retrying in \(Int(refreshInterval))s\(cachedNote)"
+                if usage.lastFetched == nil {
+                    usage.error = "Rate limited — retrying in \(Int(refreshInterval))s"
+                }
+                // If we have cached data, don't show error — "Last updated" tells the story
                 return
             }
 
@@ -109,7 +132,31 @@ class UsageService: ObservableObject {
             }
 
         } catch {
-            usage.error = "Network error: \(error.localizedDescription)"
+            // Transient network error (TLS, timeout, etc.) — retry once after 3s
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            do {
+                let (data2, response2) = try await URLSession.shared.data(for: request)
+                if let http2 = response2 as? HTTPURLResponse, http2.statusCode == 200,
+                   let json2 = try JSONSerialization.jsonObject(with: data2) as? [String: Any] {
+                    parseUsageResponse(json2)
+                    usage.lastFetched = Date()
+                    usage.error = nil
+                    if refreshInterval != defaultInterval {
+                        refreshInterval = defaultInterval
+                        startPolling()
+                    }
+                    return
+                }
+            } catch {
+                // Retry also failed — fall through
+            }
+
+            // Both attempts failed — backoff, show error only if no cached data
+            refreshInterval = min(refreshInterval * 2, maxInterval)
+            startPolling()
+            if usage.lastFetched == nil {
+                usage.error = "Network error: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -133,6 +180,19 @@ class UsageService: ObservableObject {
                 usage.weeklyResetTime = parseDate(resetAt)
             }
         }
+
+        // Parse any model-specific weekly limits (e.g. seven_day_sonnet, seven_day_opus)
+        var models: [ModelLimit] = []
+        for (key, value) in json {
+            guard key.hasPrefix("seven_day_"),
+                  let dict = value as? [String: Any],
+                  let util = dict["utilization"] as? Double else { continue }
+            let label = key.replacingOccurrences(of: "seven_day_", with: "")
+                            .replacingOccurrences(of: "_", with: " ").capitalized
+            let resetTime: Date? = (dict["resets_at"] as? String).flatMap { parseDate($0) }
+            models.append(ModelLimit(label: label, percent: util, resetTime: resetTime))
+        }
+        usage.modelLimits = models.sorted { $0.label < $1.label }
     }
 
     private func parseDate(_ string: String) -> Date? {
